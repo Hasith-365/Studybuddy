@@ -41,6 +41,8 @@ const App: React.FC = () => {
 
     // Answers state
     const [questionsToAnswer, setQuestionsToAnswer] = useState<string>('');
+    const [incorrectQuestionsList, setIncorrectQuestionsList] = useState<string[]>([]);
+    const [showIncorrectQuestions, setShowIncorrectQuestions] = useState<boolean>(false);
     
     // Study Plan state
     const [studyPlanGoal, setStudyPlanGoal] = useState<string>('');
@@ -214,9 +216,12 @@ const App: React.FC = () => {
         if (!questionsToAnswer) return;
         setIsLoading(true);
         setGeneratedContent('');
+        setIncorrectQuestionsList([]);
+        setShowIncorrectQuestions(false);
         try {
-            const answers = await geminiService.getAnswers(textbookName, questionsToAnswer, modelConfig);
-            setGeneratedContent(answers);
+            const result = await geminiService.getAnswers(textbookName, questionsToAnswer, modelConfig);
+            setGeneratedContent(result.answers);
+            setIncorrectQuestionsList(result.incorrectQuestions);
         } catch (err) { handleError(err); }
         setIsLoading(false);
     };
@@ -560,9 +565,36 @@ const App: React.FC = () => {
                             </button>
                         </div>
                         {isLoading && <LoadingSpinner message="Finding answers..." />}
-                        {!isLoading && generatedContent && (
-                             <div className="mt-8 bg-slate-800 p-6 rounded-lg prose prose-invert max-w-none">
-                                <p className="text-slate-300 whitespace-pre-wrap">{generatedContent}</p>
+                        {!isLoading && (generatedContent || incorrectQuestionsList.length > 0) && (
+                            <div className="mt-8">
+                                {incorrectQuestionsList.length > 0 && (
+                                    <div className="mb-4">
+                                        <button
+                                            onClick={() => setShowIncorrectQuestions(!showIncorrectQuestions)}
+                                            className="text-yellow-400 hover:text-yellow-300 font-semibold flex items-center"
+                                            aria-expanded={showIncorrectQuestions}
+                                        >
+                                            incorrect questions ({incorrectQuestionsList.length})
+                                            <svg xmlns="http://www.w3.org/2000/svg" className={`h-5 w-5 ml-1 transition-transform ${showIncorrectQuestions ? 'rotate-180' : ''}`} viewBox="0 0 20 20" fill="currentColor">
+                                                <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                                            </svg>
+                                        </button>
+                                        {showIncorrectQuestions && (
+                                            <div className="mt-2 bg-slate-800 border border-slate-700 p-4 rounded-lg">
+                                                <ul className="list-disc list-inside text-slate-400 space-y-1">
+                                                    {incorrectQuestionsList.map((q, i) => (
+                                                        <li key={i}>{q}</li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                                {generatedContent && (
+                                    <div className="bg-slate-800 p-6 rounded-lg prose prose-invert max-w-none">
+                                       <p className="text-slate-300 whitespace-pre-wrap">{generatedContent}</p>
+                                   </div>
+                                )}
                             </div>
                         )}
                     </div>

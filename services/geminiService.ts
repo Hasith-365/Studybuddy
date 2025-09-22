@@ -180,8 +180,19 @@ export const summarizeTopic = async (textbookName: string, topic: string, isEli5
     return response.text;
 };
 
-export const getAnswers = async (textbookName: string, questions: string, modelConfig: ModelConfig): Promise<string> => {
-    const prompt = `Provide detailed answers for the following questions:\n\n${questions}`;
+export const getAnswers = async (textbookName: string, questions: string, modelConfig: ModelConfig): Promise<{ answers: string; incorrectQuestions: string[] }> => {
+    const prompt = `Analyze the following list of questions about the textbook "${textbookName}".
+    
+    Questions:
+    ${questions}
+    
+    Your task is to identify which questions are valid and which are incorrect (e.g., nonsensical, malformed, or completely unrelated to any typical subject matter).
+    
+    Provide a response in a single valid JSON object format with two keys:
+    1. "answers": A string containing well-formatted, detailed answers for all the VALID questions.
+    2. "incorrectQuestions": An array of strings, where each string is one of the questions you identified as incorrect.
+    
+    If all questions are valid, "incorrectQuestions" should be an empty array. If all questions are incorrect, "answers" should be an empty string.`;
     const fullPrompt = addContextToPrompt(prompt, textbookName);
     const response = await generateContent({ 
         contents: fullPrompt,
@@ -189,7 +200,22 @@ export const getAnswers = async (textbookName: string, questions: string, modelC
             tools: [{googleSearch: {}}],
         }
     }, modelConfig);
-    return response.text;
+    
+    try {
+        const jsonText = response.text.match(/```json\n([\s\S]*?)\n```/)?.[1] || response.text;
+        const result = JSON.parse(jsonText);
+        return {
+            answers: result.answers || '',
+            incorrectQuestions: result.incorrectQuestions || []
+        };
+    } catch (e) {
+        console.error("Failed to parse answers JSON:", e);
+        // Fallback if JSON parsing fails
+        return {
+            answers: response.text,
+            incorrectQuestions: []
+        };
+    }
 };
 
 export const generateQuestionPaper = async (textbookName: string, syllabus: string, modelConfig: ModelConfig): Promise<string> => {
