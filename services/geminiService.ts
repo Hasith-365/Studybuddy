@@ -3,8 +3,6 @@ import { ModelConfig } from './types';
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
 
-// The model has been set to 'gemini-2.5-flash' to resolve the 404 "NOT_FOUND" error.
-// This is the recommended model for general text tasks and should be available.
 const MODEL_NAME = 'gemini-2.5-flash';
 
 /**
@@ -54,36 +52,14 @@ const generateContent = async (params: Omit<GenerateContentParameters, 'model'>,
     }
 };
 
-
-const flashcardSchema = {
-  type: Type.OBJECT,
-  properties: {
-    flashcards: {
-      type: Type.ARRAY,
-      items: {
-        type: Type.OBJECT,
-        properties: {
-          term: { type: Type.STRING },
-          definition: { type: Type.STRING },
-        },
-        required: ["term", "definition"]
-      },
-    },
-  },
-  required: ["flashcards"],
-};
-
-const quizSchema = {
-    type: Type.OBJECT,
-    properties: {
-        questions: {
-            type: Type.ARRAY,
-            items: {
-                type: Type.STRING
-            }
-        }
-    },
-    required: ["questions"]
+/**
+ * Prepends context to a given prompt, instructing the AI to use its knowledge and search.
+ * @param prompt The original prompt.
+ * @param textbookName The name of the textbook.
+ * @returns The full prompt with context.
+ */
+const addContextToPrompt = (prompt: string, textbookName: string): string => {
+    return `You are an AI assistant for the textbook "${textbookName}". Use your knowledge and Google Search to answer questions and perform tasks related to this textbook. Please perform the following task:\n\n${prompt}`;
 };
 
 export const researchTextbook = async (textbookName: string, modelConfig: ModelConfig): Promise<boolean> => {
@@ -98,71 +74,90 @@ export const researchTextbook = async (textbookName: string, modelConfig: ModelC
 };
 
 export const isLanguageTextbook = async (textbookName: string, modelConfig: ModelConfig): Promise<boolean> => {
+    const prompt = `Is the textbook "${textbookName}" primarily for learning a language (like Spanish, French, Japanese, etc.)? Answer with only "Yes" or "No".`;
+    const fullPrompt = addContextToPrompt(prompt, textbookName);
     const response = await generateContent({
-        contents: `Is "${textbookName}" a textbook primarily for learning a language (like Spanish, French, Japanese, etc.)? Answer with only "Yes" or "No".`
+        contents: fullPrompt,
+        config: {
+            tools: [{googleSearch: {}}],
+        }
     }, modelConfig);
     return response.text.toLowerCase().includes('yes');
 };
 
 export const generateStudyPlan = async (goal: string, syllabus: string, timeframe: string, textbookName: string, modelConfig: ModelConfig): Promise<string> => {
-    const prompt = `Create a day-by-day study plan for the textbook "${textbookName}".
+    const prompt = `Create a day-by-day study plan.
     Goal: ${goal}
     Syllabus: ${syllabus}
     Timeframe: ${timeframe}
     
     The plan should be structured and actionable. For each day, suggest specific activities a student can do using an app with the following features: 'Quiz Me', 'Create Flashcards', 'Summarize a Topic', 'Get Answers for Questions', 'Explain Like I'm 5'. Format the output clearly with headings for each day.`;
-    const response = await generateContent({ contents: prompt }, modelConfig);
+    const fullPrompt = addContextToPrompt(prompt, textbookName);
+    const response = await generateContent({ 
+        contents: fullPrompt,
+        config: {
+            tools: [{googleSearch: {}}],
+        }
+    }, modelConfig);
     return response.text;
 };
 
 export const generateQuizQuestions = async (textbookName: string, syllabus: string, grammarPreference: string, modelConfig: ModelConfig): Promise<string[]> => {
-    let prompt = `Generate 10 quiz questions based on the textbook "${textbookName}".`;
+    let prompt = `Generate 10 quiz questions.`;
     if (syllabus) {
         prompt += ` Focus on these topics: ${syllabus}.`;
     }
     if (grammarPreference !== 'No Grammar') {
         prompt += ` Include questions about ${grammarPreference === 'Full Grammar' ? 'grammar concepts' : 'a mix of grammar and general concepts'}.`;
     }
-    prompt += ` The questions should cover key concepts.`;
+    prompt += ` The questions should cover key concepts. The response must be a valid JSON object with a single key "questions" which is an array of question strings. For example: {"questions": ["What is...?"]}`;
+    const fullPrompt = addContextToPrompt(prompt, textbookName);
 
     const response = await generateContent({
-        contents: prompt,
+        contents: fullPrompt,
         config: {
-            responseMimeType: "application/json",
-            responseSchema: quizSchema,
+            tools: [{googleSearch: {}}],
         },
     }, modelConfig);
     
     try {
-        const json = JSON.parse(response.text);
+        const jsonText = response.text.match(/```json\n([\s\S]*?)\n```/)?.[1] || response.text;
+        const json = JSON.parse(jsonText);
         return json.questions || [];
     } catch (e) {
         console.error("Failed to parse quiz questions JSON:", e);
-        return [];
+        // Fallback: try to parse questions from plain text
+        return response.text.split('\n').filter(line => /^\d+\.\s/.test(line));
     }
 };
 
 export const evaluateAnswer = async (question: string, answer: string, textbookName: string, modelConfig: ModelConfig): Promise<string> => {
-    const prompt = `Textbook: "${textbookName}"
-    Question: "${question}"
+    const prompt = `Question: "${question}"
     User's Answer: "${answer}"
     
     Is the user's answer correct? Start your response with the single word "Correct" or "Incorrect". Then, provide a brief but clear explanation for why the answer is right or wrong.`;
-    const response = await generateContent({ contents: prompt }, modelConfig);
+    const fullPrompt = addContextToPrompt(prompt, textbookName);
+    const response = await generateContent({ 
+        contents: fullPrompt,
+        config: {
+            tools: [{googleSearch: {}}],
+        }
+    }, modelConfig);
     return response.text;
 };
 
 export const generateFlashcards = async (textbookName: string, topic: string, modelConfig: ModelConfig): Promise<{term: string, definition: string}[]> => {
-    const prompt = `Based on the textbook "${textbookName}", generate a list of 5 to 10 key terms and their definitions related to the topic: "${topic}".`;
+    const prompt = `Generate a list of 5 to 10 key terms and their definitions related to the topic: "${topic}". The response must be a valid JSON object with a single key "flashcards" which is an array of objects, where each object has "term" and "definition" keys. Example: {"flashcards": [{"term": "Biology", "definition": "The study of life."}]}`;
+    const fullPrompt = addContextToPrompt(prompt, textbookName);
     const response = await generateContent({
-        contents: prompt,
+        contents: fullPrompt,
         config: {
-            responseMimeType: 'application/json',
-            responseSchema: flashcardSchema
+            tools: [{googleSearch: {}}],
         }
     }, modelConfig);
     try {
-        const json = JSON.parse(response.text);
+        const jsonText = response.text.match(/```json\n([\s\S]*?)\n```/)?.[1] || response.text;
+        const json = JSON.parse(jsonText);
         return json.flashcards || [];
     } catch (e) {
         console.error("Failed to parse flashcards JSON:", e);
@@ -171,29 +166,50 @@ export const generateFlashcards = async (textbookName: string, topic: string, mo
 };
 
 export const summarizeTopic = async (textbookName: string, topic: string, isEli5Mode: boolean, modelConfig: ModelConfig): Promise<string> => {
-    let prompt = `Based on the textbook "${textbookName}", provide a concise summary of the following topic: "${topic}".`;
+    let prompt = `Provide a concise summary of the following topic: "${topic}".`;
     if (isEli5Mode) {
         prompt += " Explain it in a super simple way, like I'm 5 years old.";
     }
-    const response = await generateContent({ contents: prompt }, modelConfig);
+    const fullPrompt = addContextToPrompt(prompt, textbookName);
+    const response = await generateContent({ 
+        contents: fullPrompt,
+        config: {
+            tools: [{googleSearch: {}}],
+        }
+    }, modelConfig);
     return response.text;
 };
 
 export const getAnswers = async (textbookName: string, questions: string, modelConfig: ModelConfig): Promise<string> => {
-    const prompt = `Based on the textbook "${textbookName}", provide detailed answers for the following questions:\n\n${questions}`;
-    const response = await generateContent({ contents: prompt }, modelConfig);
+    const prompt = `Provide detailed answers for the following questions:\n\n${questions}`;
+    const fullPrompt = addContextToPrompt(prompt, textbookName);
+    const response = await generateContent({ 
+        contents: fullPrompt,
+        config: {
+            tools: [{googleSearch: {}}],
+        }
+    }, modelConfig);
     return response.text;
 };
 
 export const generateQuestionPaper = async (textbookName: string, syllabus: string, modelConfig: ModelConfig): Promise<string> => {
-    const prompt = `Based on the textbook "${textbookName}" and the syllabus "${syllabus}", generate a comprehensive question paper. Include a mix of short-answer, long-answer, and multiple-choice questions. Format it like a real exam paper.`;
-    const response = await generateContent({ contents: prompt }, modelConfig);
+    const prompt = `Based on the syllabus "${syllabus}", generate a comprehensive question paper. Include a mix of short-answer, long-answer, and multiple-choice questions. Format it like a real exam paper.`;
+    const fullPrompt = addContextToPrompt(prompt, textbookName);
+    const response = await generateContent({ 
+        contents: fullPrompt,
+        config: {
+            tools: [{googleSearch: {}}],
+        }
+    }, modelConfig);
     return response.text;
 };
 
 export const startTutorChat = (textbookName: string, modelConfig: ModelConfig): Chat => {
-    const dynamicConfig: any = {
-        systemInstruction: `You are a friendly and knowledgeable AI Tutor. Your area of expertise is the textbook "${textbookName}". Your goal is to help the user understand concepts, answer their questions, and guide them in their studies. Be encouraging and clear in your explanations.`
+    const systemInstruction = `You are a friendly and knowledgeable AI Tutor. Your area of expertise is the textbook "${textbookName}". Your goal is to help the user understand concepts, answer their questions, and guide them in their studies using Google Search to find relevant information when needed. Be encouraging and clear in your explanations.`;
+
+    const dynamicConfig: any = { 
+        systemInstruction,
+        tools: [{googleSearch: {}}]
     };
 
     if (modelConfig === 'fastest') {
