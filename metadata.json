@@ -1,0 +1,5 @@
+{
+  "name": "StudyBuddy",
+  "description": "An AI-powered study assistant that helps users learn from their textbooks by generating quizzes, summaries, study plans, and more.",
+  "requestFramePermissions": []
+}
