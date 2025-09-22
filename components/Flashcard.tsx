@@ -20,7 +20,7 @@ const Flashcard: React.FC<FlashcardProps> = ({ term, definition }) => {
     
     return (
         <div 
-            className="w-full h-full cursor-pointer group" 
+            className="w-full h-52 cursor-pointer group" 
             style={cardContainerStyle}
             onClick={() => setIsFlipped(!isFlipped)}
         >
