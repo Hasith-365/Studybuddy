@@ -41,6 +41,11 @@ const App: React.FC = () => {
 
     // Answers state
     const [questionsToAnswer, setQuestionsToAnswer] = useState<string>('');
+    
+    // Study Plan state
+    const [studyPlanGoal, setStudyPlanGoal] = useState<string>('');
+    const [studyPlanSyllabus, setStudyPlanSyllabus] = useState<string>('');
+    const [studyPlanTimeframe, setStudyPlanTimeframe] = useState<string>('');
 
     // AI Tutor state
     const [chat, setChat] = useState<Chat | null>(null);
@@ -115,6 +120,7 @@ const App: React.FC = () => {
     
     // Navigation handlers
     const navigateTo = (state: AppState) => {
+        setGeneratedContent(''); // Clear previous content when navigating
         setPreviousAppState(appState);
         setAppState(state);
     }
@@ -224,7 +230,6 @@ const App: React.FC = () => {
             setGeneratedContent(paper);
         } catch (err) { handleError(err); }
         setIsLoading(false);
-        navigateTo(AppState.QUESTION_PAPER);
     };
 
     const handleChatSend = async () => {
@@ -478,14 +483,124 @@ const App: React.FC = () => {
                          </div>
                      </div>
                  );
+            
+            case AppState.STUDY_PLAN:
+                return (
+                    <div className="w-full max-w-3xl">
+                        <BackButton onClick={handleBackToMenu} />
+                        <h2 className="text-3xl font-bold text-slate-200 mb-4">Create a Study Plan</h2>
+                        <p className="text-slate-400 mb-6">Tell me your goals and I'll create a personalized plan for you.</p>
+                        
+                        {!generatedContent && !isLoading && (
+                            <div className="flex flex-col space-y-4">
+                                <div>
+                                    <label htmlFor="goal" className="block text-sm font-medium text-slate-300 mb-1">Your Goal</label>
+                                    <input
+                                        type="text"
+                                        id="goal"
+                                        value={studyPlanGoal}
+                                        onChange={(e) => setStudyPlanGoal(e.target.value)}
+                                        className="w-full p-3 rounded-md bg-slate-800 text-slate-200 border-2 border-slate-700 focus:border-sky-500 focus:outline-none"
+                                        placeholder="e.g., Ace the midterm exam"
+                                    />
+                                </div>
+                                <div>
+                                    <label htmlFor="syllabus" className="block text-sm font-medium text-slate-300 mb-1">Syllabus/Topics</label>
+                                    <textarea
+                                        id="syllabus"
+                                        value={studyPlanSyllabus}
+                                        onChange={(e) => setStudyPlanSyllabus(e.target.value)}
+                                        className="w-full p-3 rounded-md bg-slate-800 text-slate-200 border-2 border-slate-700 focus:border-sky-500 focus:outline-none"
+                                        placeholder="e.g., Chapters 1-5, Photosynthesis, Cell Division"
+                                        rows={4}
+                                    />
+                                </div>
+                                 <div>
+                                    <label htmlFor="timeframe" className="block text-sm font-medium text-slate-300 mb-1">Timeframe</label>
+                                    <input
+                                        type="text"
+                                        id="timeframe"
+                                        value={studyPlanTimeframe}
+                                        onChange={(e) => setStudyPlanTimeframe(e.target.value)}
+                                        className="w-full p-3 rounded-md bg-slate-800 text-slate-200 border-2 border-slate-700 focus:border-sky-500 focus:outline-none"
+                                        placeholder="e.g., 2 weeks, 1 month"
+                                    />
+                                </div>
+                                <button onClick={() => handleGenerateStudyPlan(studyPlanGoal, studyPlanSyllabus, studyPlanTimeframe)} className="bg-sky-500 text-white font-bold py-2 px-6 rounded-lg hover:bg-sky-600 self-start" disabled={isLoading || !studyPlanGoal || !studyPlanSyllabus || !studyPlanTimeframe}>
+                                    {isLoading ? 'Generating...' : 'Create Plan'}
+                                </button>
+                            </div>
+                        )}
+
+                        {isLoading && <LoadingSpinner message="Building your plan..." />}
+                        {!isLoading && generatedContent && (
+                             <div className="mt-8 bg-slate-800 p-6 rounded-lg prose prose-invert max-w-none">
+                                <p className="text-slate-300 whitespace-pre-wrap">{generatedContent}</p>
+                            </div>
+                        )}
+                    </div>
+                );
+
+            case AppState.ANSWERS:
+                return (
+                    <div className="w-full max-w-3xl">
+                        <BackButton onClick={handleBackToMenu} />
+                        <h2 className="text-3xl font-bold text-slate-200 mb-4">Get Answers</h2>
+                        <p className="text-slate-400 mb-6">Type your questions below and I'll provide detailed answers.</p>
+                        <div className="flex flex-col space-y-4">
+                            <textarea
+                                value={questionsToAnswer}
+                                onChange={(e) => setQuestionsToAnswer(e.target.value)}
+                                className="w-full p-3 rounded-md bg-slate-800 text-slate-200 border-2 border-slate-700 focus:border-sky-500 focus:outline-none"
+                                placeholder="e.g., 1. What is the powerhouse of the cell?&#10;2. Explain Newton's First Law."
+                                rows={8}
+                            />
+                            <button onClick={handleGetAnswers} className="bg-sky-500 text-white font-bold py-2 px-6 rounded-lg hover:bg-sky-600 self-start" disabled={isLoading || !questionsToAnswer}>
+                                {isLoading ? 'Finding answers...' : 'Get Answers'}
+                            </button>
+                        </div>
+                        {isLoading && <LoadingSpinner message="Finding answers..." />}
+                        {!isLoading && generatedContent && (
+                             <div className="mt-8 bg-slate-800 p-6 rounded-lg prose prose-invert max-w-none">
+                                <p className="text-slate-300 whitespace-pre-wrap">{generatedContent}</p>
+                            </div>
+                        )}
+                    </div>
+                );
+
+            case AppState.QUESTION_PAPER:
+                return (
+                    <div className="w-full max-w-3xl">
+                        <BackButton onClick={handleBackToMenu} />
+                        <h2 className="text-3xl font-bold text-slate-200 mb-4">Generate Question Paper</h2>
+                        <p className="text-slate-400 mb-6">Provide the syllabus or topics to be included in the exam paper.</p>
+                        <div className="flex flex-col space-y-4">
+                            <textarea
+                                value={syllabus}
+                                onChange={(e) => setSyllabus(e.target.value)}
+                                className="w-full p-3 rounded-md bg-slate-800 text-slate-200 border-2 border-slate-700 focus:border-sky-500 focus:outline-none"
+                                placeholder="e.g., Chapters 10-15, Thermodynamics, Organic Chemistry Basics"
+                                rows={5}
+                            />
+                            <button onClick={handleGenerateQuestionPaper} className="bg-sky-500 text-white font-bold py-2 px-6 rounded-lg hover:bg-sky-600 self-start" disabled={isLoading || !syllabus}>
+                                {isLoading ? 'Generating...' : 'Generate Paper'}
+                            </button>
+                        </div>
+                        {isLoading && <LoadingSpinner message="Generating paper..." />}
+                        {!isLoading && generatedContent && (
+                             <div className="mt-8 bg-slate-800 p-6 rounded-lg prose prose-invert max-w-none">
+                                <p className="text-slate-300 whitespace-pre-wrap">{generatedContent}</p>
+                            </div>
+                        )}
+                    </div>
+                );
                  
-            // Add other cases for QUESTION_PAPER, ANSWERS, STUDY_PLAN...
             default:
                 return (
                     <div>
                         <BackButton onClick={handleBackToMenu} />
-                        <h2 className="text-2xl text-slate-200">Coming Soon!</h2>
-                        <p className="text-slate-400">This feature is under construction.</p>
+                        <h2 className="text-2xl text-slate-200">Something went wrong</h2>
+                        <p className="text-slate-400">Please go back and try again.</p>
                     </div>
                 );
         }
@@ -496,7 +611,9 @@ const App: React.FC = () => {
             <Header quizScore={quizScore} showScore={appState === AppState.QUIZ} />
             <main className="flex-grow py-8 flex items-center justify-center">
                 {error && appState !== AppState.HOME && <p className="text-red-400 mb-4">{error}</p>}
-                {renderState()}
+                <div className="w-full h-full flex items-center justify-center">
+                    {renderState()}
+                </div>
             </main>
             {appState > AppState.HOME && appState !== AppState.AI_TUTOR && (
                 <FloatingActionButton onClick={() => navigateTo(AppState.AI_TUTOR)} />
