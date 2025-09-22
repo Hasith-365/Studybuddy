@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 
 interface FlashcardProps {
@@ -21,7 +20,7 @@ const Flashcard: React.FC<FlashcardProps> = ({ term, definition }) => {
     
     return (
         <div 
-            className="w-full h-48 cursor-pointer group" 
+            className="w-full h-full cursor-pointer group" 
             style={cardContainerStyle}
             onClick={() => setIsFlipped(!isFlipped)}
         >
