@@ -27,9 +27,11 @@ const App: React.FC = () => {
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState<number>(0);
     const [userAnswers, setUserAnswers] = useState<string[]>([]);
     const [quizScore, setQuizScore] = useState<number>(0);
-    const [isEvaluating, setIsEvaluating] = useState<boolean>(false);
+    const [isSubmittingAnswer, setIsSubmittingAnswer] = useState<boolean>(false);
     const [incorrectAnswers, setIncorrectAnswers] = useState<IncorrectAnswer[]>([]);
     const [grammarPreference, setGrammarPreference] = useState('No Grammar');
+    const [showEvaluationResult, setShowEvaluationResult] = useState<boolean>(false);
+    const [showIncorrectList, setShowIncorrectList] = useState<boolean>(false);
 
     // Flashcard state
     const [flashcards, setFlashcards] = useState<FlashcardType[]>([]);
@@ -80,6 +82,7 @@ const App: React.FC = () => {
             setError('An unexpected error occurred. Please try again.');
         }
         setIsLoading(false);
+        setIsSubmittingAnswer(false);
     };
 
     const handleBackToMenu = () => {
@@ -91,6 +94,9 @@ const App: React.FC = () => {
         setCurrentQuestionIndex(0);
         setUserAnswers([]);
         setQuizScore(0);
+        setIncorrectAnswers([]);
+        setShowEvaluationResult(false);
+        setShowIncorrectList(false);
         setFlashcards([]);
         setSyllabus('');
     };
@@ -146,6 +152,8 @@ const App: React.FC = () => {
             setQuizQuestions(questions);
             setUserAnswers(new Array(questions.length).fill(''));
             setIncorrectAnswers([]);
+            setShowEvaluationResult(false);
+            setShowIncorrectList(false);
             setQuizScore(0);
             setCurrentQuestionIndex(0);
             if (questions.length > 0) {
@@ -162,7 +170,7 @@ const App: React.FC = () => {
     };
 
     const handleAnswerSubmit = async (answer: string) => {
-        setIsEvaluating(true);
+        setIsSubmittingAnswer(true);
         const newAnswers = [...userAnswers];
         newAnswers[currentQuestionIndex] = answer;
         setUserAnswers(newAnswers);
@@ -171,23 +179,28 @@ const App: React.FC = () => {
             const evaluation = await geminiService.evaluateAnswer(quizQuestions[currentQuestionIndex], answer, textbookName, modelConfig);
             if (evaluation.toLowerCase().startsWith('correct')) {
                 setQuizScore(prev => prev + 1);
+                handleProceedToNext(); // Correct, so proceed automatically
             } else {
                 setIncorrectAnswers(prev => [...prev, {
                     question: quizQuestions[currentQuestionIndex],
                     userAnswer: answer,
                     correctAnswerExplanation: evaluation,
                 }]);
-            }
-
-            if (currentQuestionIndex < quizQuestions.length - 1) {
-                setCurrentQuestionIndex(prev => prev + 1);
-            } else {
-                setAppState(AppState.QUIZ_RESULTS);
+                setShowEvaluationResult(true); // Incorrect, so show explanation screen
             }
         } catch (err) {
             handleError(err);
         }
-        setIsEvaluating(false);
+        setIsSubmittingAnswer(false);
+    };
+
+    const handleProceedToNext = () => {
+        setShowEvaluationResult(false);
+        if (currentQuestionIndex < quizQuestions.length - 1) {
+            setCurrentQuestionIndex(prev => prev + 1);
+        } else {
+            setAppState(AppState.QUIZ_RESULTS);
+        }
     };
     
     const handleGenerateFlashcards = async () => {
@@ -331,37 +344,78 @@ const App: React.FC = () => {
                 );
             case AppState.QUIZ:
                 const currentQuestion = quizQuestions[currentQuestionIndex];
-                const options = ["A", "B", "C", "D"]; // Placeholder for multiple choice if implemented
                 return (
-                    <div>
+                    <div className="w-full max-w-3xl">
+                        {showIncorrectList && (
+                            <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4" onClick={() => setShowIncorrectList(false)}>
+                                <div className="bg-slate-800 p-6 rounded-lg max-w-2xl w-full max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+                                    <div className="flex justify-between items-center mb-4">
+                                        <h3 className="text-xl font-bold text-slate-200">Review Incorrect Answers</h3>
+                                        <button onClick={() => setShowIncorrectList(false)} className="text-2xl text-slate-400 hover:text-white">&times;</button>
+                                    </div>
+                                    <div className="space-y-4">
+                                        {incorrectAnswers.map((item, index) => (
+                                            <div key={index} className="bg-slate-700 p-4 rounded-lg">
+                                                <p className="font-semibold text-slate-300 mb-2">Q: {item.question}</p>
+                                                <p className="text-red-400 mb-2"><span className="font-bold">Your Answer:</span> {item.userAnswer}</p>
+                                                <p className="text-green-400"><span className="font-bold">Explanation:</span> {item.correctAnswerExplanation.replace(/^(Incorrect\.\s*)/i, '')}</p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
                         <div className="flex justify-between items-center mb-4">
                             <h2 className="text-2xl font-bold text-slate-200">Question {currentQuestionIndex + 1}/{quizQuestions.length}</h2>
-                            <div className="text-sky-400 font-semibold">Score: {quizScore}</div>
+                            <div className="flex items-center space-x-4">
+                                {incorrectAnswers.length > 0 && (
+                                    <button onClick={() => setShowIncorrectList(true)} className="text-yellow-400 hover:text-yellow-300 font-semibold">
+                                        Incorrect questions ({incorrectAnswers.length})
+                                    </button>
+                                )}
+                                <div className="text-sky-400 font-semibold">Score: {quizScore}</div>
+                            </div>
                         </div>
-                        <div className="bg-slate-800 p-6 rounded-lg mb-6">
-                            <p className="text-lg text-slate-300">{currentQuestion}</p>
-                        </div>
-                        <div className="flex flex-col space-y-4">
-                             <textarea
-                                 value={userAnswers[currentQuestionIndex]}
-                                 onChange={(e) => {
-                                     const newAnswers = [...userAnswers];
-                                     newAnswers[currentQuestionIndex] = e.target.value;
-                                     setUserAnswers(newAnswers);
-                                 }}
-                                 className="w-full p-3 rounded-md bg-slate-800 text-slate-200 border-2 border-slate-700 focus:border-sky-500 focus:outline-none"
-                                 placeholder="Type your answer here..."
-                                 rows={5}
-                                 disabled={isEvaluating}
-                             />
-                             <button
-                                 onClick={() => handleAnswerSubmit(userAnswers[currentQuestionIndex])}
-                                 className="bg-sky-500 text-white font-bold py-3 px-6 rounded-lg hover:bg-sky-600 transition-colors disabled:bg-slate-600"
-                                 disabled={isEvaluating || !userAnswers[currentQuestionIndex]}
-                             >
-                                 {isEvaluating ? 'Evaluating...' : 'Submit Answer'}
-                             </button>
-                        </div>
+
+                        {showEvaluationResult ? (
+                            <div className="bg-slate-800 p-6 rounded-lg text-center">
+                                <h3 className="text-3xl font-bold text-red-400 mb-4">Incorrect</h3>
+                                <div className="text-left bg-slate-700 p-4 rounded-lg mb-6">
+                                    <p className="text-slate-300">{incorrectAnswers[incorrectAnswers.length - 1]?.correctAnswerExplanation.replace(/^(Incorrect\.\s*)/i, '')}</p>
+                                </div>
+                                <button onClick={handleProceedToNext} className="bg-sky-500 text-white font-bold py-3 px-8 rounded-lg hover:bg-sky-600 transition-colors">
+                                    Proceed
+                                </button>
+                            </div>
+                        ) : (
+                            <div>
+                                <div className="bg-slate-800 p-6 rounded-lg mb-6">
+                                    <p className="text-lg text-slate-300">{currentQuestion}</p>
+                                </div>
+                                <div className="flex flex-col space-y-4">
+                                    <textarea
+                                        value={userAnswers[currentQuestionIndex]}
+                                        onChange={(e) => {
+                                            const newAnswers = [...userAnswers];
+                                            newAnswers[currentQuestionIndex] = e.target.value;
+                                            setUserAnswers(newAnswers);
+                                        }}
+                                        className="w-full p-3 rounded-md bg-slate-800 text-slate-200 border-2 border-slate-700 focus:border-sky-500 focus:outline-none"
+                                        placeholder="Type your answer here..."
+                                        rows={5}
+                                        disabled={isSubmittingAnswer}
+                                    />
+                                    <button
+                                        onClick={() => handleAnswerSubmit(userAnswers[currentQuestionIndex])}
+                                        className="bg-sky-500 text-white font-bold py-3 px-6 rounded-lg hover:bg-sky-600 transition-colors disabled:bg-slate-600"
+                                        disabled={isSubmittingAnswer || !userAnswers[currentQuestionIndex]}
+                                    >
+                                        {isSubmittingAnswer ? 'Evaluating...' : 'Submit Answer'}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 );
 
