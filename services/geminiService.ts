@@ -147,7 +147,7 @@ export const evaluateAnswer = async (question: string, answer: string, textbookN
 };
 
 export const generateFlashcards = async (textbookName: string, topic: string, modelConfig: ModelConfig): Promise<{term: string, definition: string}[]> => {
-    const prompt = `Generate a list of 5 to 10 key terms and their definitions related to the topic: "${topic}". The response must be a valid JSON object with a single key "flashcards" which is an array of objects, where each object has "term" and "definition" keys. Example: {"flashcards": [{"term": "Biology", "definition": "The study of life."}]}`;
+    const prompt = `Generate a list of 5 to 10 key terms and their definitions related to the topic: "${topic}". The definitions should be short, concise, and easy to understand, suitable for a flashcard. The response must be a valid JSON object with a single key "flashcards" which is an array of objects, where each object has "term" and "definition" keys. Example: {"flashcards": [{"term": "Biology", "definition": "The study of life."}]}`;
     const fullPrompt = addContextToPrompt(prompt, textbookName);
     const response = await generateContent({
         contents: fullPrompt,
