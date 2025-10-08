@@ -11,6 +11,8 @@ export enum AppState {
   ANSWERS,
   FLASHCARDS,
   AI_TUTOR,
+  PDF_CHAT,
+  PDF_FINDER,
 }
 
 export type ModelConfig = 'balanced' | 'fastest';
@@ -29,4 +31,9 @@ export interface IncorrectAnswer {
   question: string;
   userAnswer: string;
   correctAnswerExplanation: string;
+}
+
+export interface PdfLink {
+  title: string;
+  url: string;
 }

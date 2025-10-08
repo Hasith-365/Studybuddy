@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type, Chat, GenerateContentParameters, GenerateContentResponse } from "@google/genai";
-import { ModelConfig } from './types';
+import { ModelConfig, PdfLink } from './types';
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
 
@@ -60,6 +60,29 @@ const generateContent = async (params: Omit<GenerateContentParameters, 'model'>,
  */
 const addContextToPrompt = (prompt: string, textbookName: string): string => {
     return `You are an AI assistant for the textbook "${textbookName}". Use your knowledge and Google Search to answer questions and perform tasks related to this textbook. Please perform the following task:\n\n${prompt}`;
+};
+
+export const startPdfChat = (modelConfig: ModelConfig): Chat => {
+    const systemInstruction = `You are an AI assistant whose expertise is the text provided by the user.
+- Answer questions based ONLY on the provided text.
+- Do not use any external knowledge or Google Search.
+- If the answer is not found in the text, state that clearly.
+- Respond in the language of the user's question unless otherwise instructed.
+- When asked about the document's content, be thorough and precise.`;
+
+    const dynamicConfig: any = { 
+        systemInstruction,
+        tools: [] 
+    };
+
+    if (modelConfig === 'fastest') {
+        dynamicConfig.thinkingConfig = { thinkingBudget: 0 };
+    }
+
+    return ai.chats.create({
+        model: MODEL_NAME,
+        config: dynamicConfig,
+    });
 };
 
 export const researchTextbook = async (textbookName: string, modelConfig: ModelConfig): Promise<boolean> => {
@@ -246,4 +269,28 @@ export const startTutorChat = (textbookName: string, modelConfig: ModelConfig): 
         model: MODEL_NAME,
         config: dynamicConfig,
     });
+};
+
+export const findPdfOnline = async (textbookName: string, modelConfig: ModelConfig): Promise<PdfLink[]> => {
+    const prompt = `Using Google Search, find publicly available PDF versions of the textbook "${textbookName}".`;
+
+    const response = await generateContent({
+        contents: prompt,
+        config: {
+            tools: [{googleSearch: {}}],
+            // Removed responseMimeType and responseSchema as they are incompatible with the googleSearch tool.
+        },
+    }, modelConfig);
+
+    // Per the guidelines, when using googleSearch, source URLs must be extracted from groundingMetadata.
+    const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+
+    const links: PdfLink[] = groundingChunks
+        .map((chunk: any) => ({
+            title: chunk.web?.title || 'Unknown Source',
+            url: chunk.web?.uri || '',
+        }))
+        .filter((link: PdfLink) => link.url); // Ensure we only return links with a URL.
+
+    return links;
 };
